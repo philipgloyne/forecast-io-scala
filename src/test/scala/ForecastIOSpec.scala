@@ -11,7 +11,8 @@ import scala.util.Failure
 import java.util.Date
 
 class ForecastIOSpec extends FunSpec {
-  val apiKey = System.getenv("FORECASTIO_APIKEY")
+
+  val apiKey = System.getenv("DARKSKY_SECRET_KEY")
 
   describe("Starting the test suite") {
     it("should have a set apiKey system var"){

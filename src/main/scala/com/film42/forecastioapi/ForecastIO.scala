@@ -1,59 +1,64 @@
 package com.film42.forecastioapi
 
-import com.eclipsesource.json.JsonObject
 import java.net.URL
-import java.util.{Date, Scanner}
-import spray.json._
-import model.ForecastJsonProtocol._
-import model._
-import scala.util.Try
+import java.util.Date
+
+import com.eclipsesource.json.JsonObject
 import com.film42.forecastioapi.extras.LocationPoint
+import com.film42.forecastioapi.model.ForecastJsonProtocol._
+import com.film42.forecastioapi.model._
+import org.apache.commons.io.IOUtils
+import spray.json._
 
-case class ForecastIO(apiKey: String, units: String = "us") {
+import scala.Option.empty
+import scala.util.Try
 
-  def forecast(apiKey: String, lat: String, lon: String, date: Date = new Date()): Try[Forecast] = {
+case class ForecastIO(apiKey: String, units: String = "si") {
+
+  def forecast(apiKey: String, lat: String, lon: String, date: Option[Date]): Try[Forecast] = {
     Try( new Forecast(apiKey, lat, lon, units, date) )
   }
 
   def forecast(lat: String, lon: String, date: Date): Try[Forecast] = {
-    forecast(apiKey, lat, lon, date)
+    forecast(apiKey, lat, lon, Some(date))
   }
 
   def forecast(lat: String, lon: String): Try[Forecast] = {
-    forecast(apiKey, lat, lon)
+    forecast(apiKey, lat, lon, empty)
   }
 
   def forecast(location: LocationPoint): Try[Forecast] = {
-    forecast(apiKey, location.lat, location.lon)
+    forecast(apiKey, location.lat, location.lon, empty)
   }
 
   def forecast(location: LocationPoint, date: Date): Try[Forecast] = {
-    forecast(apiKey, location.lat, location.lon, date)
+    forecast(apiKey, location.lat, location.lon, Some(date))
   }
 
 }
 
-class Forecast(apiKey: String, lat: String, lon: String, units: String, date: Date) {
+class Forecast(apiKey: String, lat: String, lon: String, units: String, date: Option[Date]) {
 
   // Timestamp constructor
-  def this(apiKey: String, lat: String, lon: String, units: String, timestamp: Int) =
-    this(apiKey, lat, lon, units, new Date(timestamp * 1000L))
+  def this(apiKey: String, lat: String, lon: String, units: String, timestamp: Long) =
+    this(apiKey, lat, lon, units, Some(new Date(timestamp * 1000L)))
 
+  private val forecastBaseUrl = "https://api.darksky.net/forecast";
   private val forecastJson = getForecast.asJsObject
 
   private def getForecast = {
-    val ts = date.getTime / 1000
     val u = {
-      if (date == new Date()) new URL(s"https://api.forecast.io/forecast/$apiKey/$lat,$lon?units=$units")
-      else new URL(s"https://api.forecast.io/forecast/$apiKey/$lat,$lon,$ts?units=$units")
+      if (date.nonEmpty) {
+        val ts = date.get.getTime / 1000
+        new URL(s"$forecastBaseUrl/$apiKey/$lat,$lon,$ts?units=$units")
+      } else {
+        new URL(s"$forecastBaseUrl/$apiKey/$lat,$lon?units=$units")
+      }
     }
-    val s = new Scanner(u.openStream(), "UTF-8")
     try {
-      s.useDelimiter("\\A").next().asJson
+      new String(IOUtils.toByteArray(u.openStream())).parseJson
     } catch {
       case e: Exception => throw new Exception(e.getMessage)
-    } finally {
-      s.close()
     }
   }
 
@@ -61,9 +66,9 @@ class Forecast(apiKey: String, lat: String, lon: String, units: String, date: Da
 
   def longitude: String = lon
 
-  def datetime: Date = date
+  def datetime: Date = if (date.isDefined) date.get else new Date()
 
-  def time: Int = { date.getTime / 1000 }.asInstanceOf[Int]
+  def time: Long = { date.get.getTime / 1000L }
 
   def timezone: String = {
     forecastJson.getFields("timezone")(0).convertTo[String]
